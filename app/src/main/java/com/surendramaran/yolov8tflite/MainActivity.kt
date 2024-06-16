@@ -10,6 +10,7 @@ import android.graphics.Matrix
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
+import android.view.View
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -23,7 +24,7 @@ import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private lateinit var binding: ActivityMainBinding
-    private val isFrontCamera = false
+    private var isRealtimeMode: Boolean = false // Flag to track current mode
 
     private var preview: Preview? = null
     private var imageAnalyzer: ImageAnalysis? = null
@@ -45,7 +46,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        val selectedOption = intent.getStringExtra("mode") // Corrected to retrieve "mode"
+        val selectedOption = intent.getStringExtra("mode") ?: "realtime" // Default to realtime mode
 
         galleryLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
@@ -60,12 +61,14 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         }
 
         if (selectedOption == "realtime") {
+            isRealtimeMode = true
             if (allPermissionsGranted()) {
                 startCamera()
             } else {
                 ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
             }
         } else {
+            isRealtimeMode = false
             openGallery()
         }
     }
@@ -113,13 +116,9 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             val matrix = Matrix().apply {
                 postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
 
-                if (isFrontCamera) {
-                    postScale(
-                        -1f,
-                        1f,
-                        imageProxy.width.toFloat(),
-                        imageProxy.height.toFloat()
-                    )
+                // Check if we need to mirror the image (for front camera)
+                if (!isRealtimeMode) {
+                    postScale(-1f, 1f, imageProxy.width.toFloat() / 2, imageProxy.height.toFloat() / 2)
                 }
             }
 
@@ -128,7 +127,11 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
                 matrix, true
             )
 
-            detector.detect(rotatedBitmap)
+            if (isRealtimeMode) {
+                detector.detect(rotatedBitmap)
+            } else {
+                // If not in realtime mode, do nothing with the camera frames
+            }
         }
 
         cameraProvider.unbindAll()
@@ -151,12 +154,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
     }
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions[Manifest.permission.CAMERA] == true) { startCamera() }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         detector.clear()
@@ -165,23 +162,34 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
     override fun onResume() {
         super.onResume()
-        if (allPermissionsGranted()){
+        if (isRealtimeMode && allPermissionsGranted()) {
             startCamera()
         } else {
-            requestPermissionLauncher.launch(REQUIRED_PERMISSIONS)
+            // In gallery mode, we don't need to resume camera
         }
     }
 
     override fun onEmptyDetect() {
-        binding.overlay.invalidate()
+        runOnUiThread {
+            binding.overlay.visibility = View.GONE
+        }
     }
 
     override fun onDetect(boundingBoxes: List<BoundingBox>, inferenceTime: Long) {
         runOnUiThread {
-            binding.inferenceTime.text = "${inferenceTime}ms"
-            binding.overlay.apply {
-                setResults(boundingBoxes)
-                invalidate()
+            if (isRealtimeMode) {
+                binding.overlay.apply {
+                    setResults(boundingBoxes)
+                    visibility = View.VISIBLE
+                    invalidate()
+                }
+            } else {
+                // In gallery mode, show detection results
+                binding.overlay.apply {
+                    setResults(boundingBoxes)
+                    visibility = View.VISIBLE // Show overlay when showing selected image
+                    invalidate()
+                }
             }
         }
     }
@@ -194,8 +202,13 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private fun detectFromGallery(bitmap: Bitmap) {
         // Resize the bitmap if necessary
         val resizedBitmap = Bitmap.createScaledBitmap(bitmap, detector.tensorWidth, detector.tensorHeight, false)
-        // Run detection on the selected image
+        // Run detection on the resized bitmap
         detector.detect(resizedBitmap)
+        // Display the selected image on the UI
+        runOnUiThread {
+            binding.selectedImage.setImageBitmap(resizedBitmap)
+            binding.selectedImage.visibility = View.VISIBLE
+        }
     }
 
     companion object {
@@ -206,4 +219,3 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         ).toTypedArray()
     }
 }
-
