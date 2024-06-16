@@ -20,10 +20,12 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- SelectionActivity declaration -->
+        <activity android:name=".SelectionActivity" />
+        <!-- MainActivity declaration -->
         <activity android:name=".MainActivity" />
     </application>
 

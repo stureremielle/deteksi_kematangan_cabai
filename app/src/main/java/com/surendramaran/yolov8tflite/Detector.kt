@@ -26,8 +26,8 @@ class Detector(
     private var interpreter: Interpreter? = null
     private var labels = mutableListOf<String>()
 
-    private var tensorWidth = 0
-    private var tensorHeight = 0
+    var tensorWidth = 0
+    var tensorHeight = 0
     private var numChannel = 0
     private var numElements = 0
 

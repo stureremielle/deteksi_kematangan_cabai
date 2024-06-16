@@ -1,23 +1,22 @@
 package com.surendramaran.yolov8tflite
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Log
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.AspectRatio
-import androidx.camera.core.Camera
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
+import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.surendramaran.yolov8tflite.Constants.LABELS_PATH
-import com.surendramaran.yolov8tflite.Constants.MODEL_PATH
 import com.surendramaran.yolov8tflite.databinding.ActivityMainBinding
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -34,27 +33,47 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
     private lateinit var cameraExecutor: ExecutorService
 
+    private lateinit var galleryLauncher: ActivityResultLauncher<Intent>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        detector = Detector(baseContext, MODEL_PATH, LABELS_PATH, this)
+        detector = Detector(baseContext, Constants.MODEL_PATH, Constants.LABELS_PATH, this)
         detector.setup()
 
-        if (allPermissionsGranted()) {
-            startCamera()
-        } else {
-            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+        cameraExecutor = Executors.newSingleThreadExecutor()
+
+        val selectedOption = intent.getStringExtra("mode") // Corrected to retrieve "mode"
+
+        galleryLauncher = registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+            if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+                val uri = result.data!!.data
+                val inputStream = contentResolver.openInputStream(uri!!)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream!!.close()
+                detectFromGallery(bitmap)
+            }
         }
 
-        cameraExecutor = Executors.newSingleThreadExecutor()
+        if (selectedOption == "realtime") {
+            if (allPermissionsGranted()) {
+                startCamera()
+            } else {
+                ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+            }
+        } else {
+            openGallery()
+        }
     }
 
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
-            cameraProvider  = cameraProviderFuture.get()
+            cameraProvider = cameraProviderFuture.get()
             bindCameraUseCases()
         }, ContextCompat.getMainExecutor(this))
     }
@@ -69,7 +88,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             .requireLensFacing(CameraSelector.LENS_FACING_BACK)
             .build()
 
-        preview =  Preview.Builder()
+        preview = Preview.Builder()
             .setTargetAspectRatio(AspectRatio.RATIO_4_3)
             .setTargetRotation(rotation)
             .build()
@@ -123,7 +142,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             )
 
             preview?.setSurfaceProvider(binding.viewFinder.surfaceProvider)
-        } catch(exc: Exception) {
+        } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed", exc)
         }
     }
@@ -133,8 +152,9 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()) {
-        if (it[Manifest.permission.CAMERA] == true) { startCamera() }
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions[Manifest.permission.CAMERA] == true) { startCamera() }
     }
 
     override fun onDestroy() {
@@ -152,14 +172,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         }
     }
 
-    companion object {
-        private const val TAG = "Camera"
-        private const val REQUEST_CODE_PERMISSIONS = 10
-        private val REQUIRED_PERMISSIONS = mutableListOf (
-            Manifest.permission.CAMERA
-        ).toTypedArray()
-    }
-
     override fun onEmptyDetect() {
         binding.overlay.invalidate()
     }
@@ -173,4 +185,25 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             }
         }
     }
+
+    private fun openGallery() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        galleryLauncher.launch(intent)
+    }
+
+    private fun detectFromGallery(bitmap: Bitmap) {
+        // Resize the bitmap if necessary
+        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, detector.tensorWidth, detector.tensorHeight, false)
+        // Run detection on the selected image
+        detector.detect(resizedBitmap)
+    }
+
+    companion object {
+        private const val TAG = "Camera"
+        private const val REQUEST_CODE_PERMISSIONS = 10
+        private val REQUIRED_PERMISSIONS = mutableListOf(
+            Manifest.permission.CAMERA
+        ).toTypedArray()
+    }
 }
+

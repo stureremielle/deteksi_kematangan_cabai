@@ -12,18 +12,16 @@ public class SplashActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_splash); // Ensure you have an XML layout named activity_splash
 
-        // Delay for 2 seconds before starting MainActivity
+        // Delay for 2 seconds before starting SelectionActivity
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
-                // Start MainActivity
-                Intent intent = new Intent(SplashActivity.this, MainActivity.class);
+                // Start SelectionActivity
+                Intent intent = new Intent(SplashActivity.this, SelectionActivity.class);
                 startActivity(intent);
                 // Finish SplashActivity
                 finish();
             }
-        }, 5000); // 2000 milliseconds delay
+        }, 3000); // 2000 milliseconds delay
     }
 }
-
-
