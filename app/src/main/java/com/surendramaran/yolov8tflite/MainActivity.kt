@@ -1,6 +1,8 @@
 package com.surendramaran.yolov8tflite
 
 import android.Manifest
+import android.graphics.Canvas
+import android.graphics.Color
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -200,16 +202,52 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     }
 
     private fun detectFromGallery(bitmap: Bitmap) {
-        // Resize the bitmap if necessary
-        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, detector.tensorWidth, detector.tensorHeight, false)
-        // Run detection on the resized bitmap
-        detector.detect(resizedBitmap)
+        // Calculate the target width and height with 3:4 aspect ratio
+        val targetWidth = detector.tensorWidth
+        val targetHeight = detector.tensorHeight
+
+        // Calculate the aspect ratio of the original image
+        val originalWidth = bitmap.width
+        val originalHeight = bitmap.height
+        val aspectRatio = originalWidth.toFloat() / originalHeight.toFloat()
+
+        // Calculate new dimensions maintaining 3:4 aspect ratio
+        val newWidth: Int
+        val newHeight: Int
+        if (aspectRatio > 3.0 / 4.0) {
+            // Image is wider, calculate new dimensions based on width
+            newWidth = targetWidth
+            newHeight = (targetWidth / aspectRatio).toInt()
+        } else {
+            // Image is taller or matches aspect ratio, calculate new dimensions based on height
+            newHeight = targetHeight
+            newWidth = (targetHeight * aspectRatio).toInt()
+        }
+
+        // Resize the bitmap while maintaining aspect ratio
+        val resizedBitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+
+        // Create a new bitmap of target dimensions with neutral padding color (white)
+        val paddedBitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(paddedBitmap)
+        canvas.drawColor(Color.WHITE) // or any other neutral color
+
+        // Calculate the position to draw the resized image centered in the padded bitmap
+        val left = (targetWidth - newWidth) / 2
+        val top = (targetHeight - newHeight) / 2
+        canvas.drawBitmap(resizedBitmap, left.toFloat(), top.toFloat(), null)
+
+        // Run detection on the padded bitmap
+        detector.detect(paddedBitmap)
+
         // Display the selected image on the UI
         runOnUiThread {
-            binding.selectedImage.setImageBitmap(resizedBitmap)
+            binding.selectedImage.setImageBitmap(paddedBitmap)
             binding.selectedImage.visibility = View.VISIBLE
         }
     }
+
+
 
     companion object {
         private const val TAG = "Camera"
