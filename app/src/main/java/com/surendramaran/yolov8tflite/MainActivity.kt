@@ -1,18 +1,19 @@
 package com.surendramaran.yolov8tflite
 
 import android.Manifest
-import android.graphics.Canvas
-import android.graphics.Color
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
 import android.view.View
+import android.widget.TextView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -35,13 +36,20 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private lateinit var detector: Detector
 
     private lateinit var cameraExecutor: ExecutorService
-
     private lateinit var galleryLauncher: ActivityResultLauncher<Intent>
+    private lateinit var inferenceTimeTextView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        inferenceTimeTextView = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.BLACK)
+            setPadding(8, 4, 8, 4)
+        }
+        binding.root.addView(inferenceTimeTextView)
 
         detector = Detector(baseContext, Constants.MODEL_PATH, Constants.LABELS_PATH, this)
         detector.setup()
@@ -174,6 +182,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     override fun onEmptyDetect() {
         runOnUiThread {
             binding.overlay.visibility = View.GONE
+            inferenceTimeTextView.text = ""
         }
     }
 
@@ -193,6 +202,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
                     invalidate()
                 }
             }
+            inferenceTimeTextView.text = "Inference Time: ${inferenceTime}ms"
         }
     }
 
@@ -246,8 +256,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             binding.selectedImage.visibility = View.VISIBLE
         }
     }
-
-
 
     companion object {
         private const val TAG = "Camera"
