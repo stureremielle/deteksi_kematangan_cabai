@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
@@ -13,7 +12,7 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
 import android.view.View
-import android.widget.TextView
+import android.widget.Button
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -36,50 +35,69 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private lateinit var detector: Detector
 
     private lateinit var cameraExecutor: ExecutorService
+
     private lateinit var galleryLauncher: ActivityResultLauncher<Intent>
-    private lateinit var inferenceTimeTextView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        inferenceTimeTextView = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setBackgroundColor(Color.BLACK)
-            setPadding(8, 4, 8, 4)
-        }
-        binding.root.addView(inferenceTimeTextView)
+        // Initialize detector with the required parameters
+        detector = Detector(this, Constants.MODEL_PATH, Constants.LABELS_PATH, this)
+        detector.setup() // Call setup to initialize the detector
 
-        detector = Detector(baseContext, Constants.MODEL_PATH, Constants.LABELS_PATH, this)
-        detector.setup()
-
+        // Initialize cameraExecutor
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        val selectedOption = intent.getStringExtra("mode") ?: "realtime" // Default to realtime mode
-
-        galleryLauncher = registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { result ->
-            if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-                val uri = result.data!!.data
-                val inputStream = contentResolver.openInputStream(uri!!)
-                val bitmap = BitmapFactory.decodeStream(inputStream)
-                inputStream!!.close()
-                detectFromGallery(bitmap)
+        // Initialize galleryLauncher
+        galleryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val data: Intent? = result.data
+                if (data != null) {
+                    // Handle the selected image
+                    val selectedImageUri = data.data
+                    // Process the selected image
+                }
             }
         }
 
-        if (selectedOption == "realtime") {
-            isRealtimeMode = true
-            if (allPermissionsGranted()) {
-                startCamera()
+        // Check the intent data to determine the mode
+        val mode = intent.getStringExtra("mode")
+        if (mode != null) {
+            isRealtimeMode = mode == "realtime"
+            if (isRealtimeMode) {
+                // Handle real-time detection mode
+                if (allPermissionsGranted()) {
+                    startCamera()
+                } else {
+                    ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+                }
             } else {
-                ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+                // Handle gallery mode
+                val imageUri = intent.data
+                if (imageUri != null) {
+                    val bitmap = MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
+                    detectFromGallery(bitmap)
+                }
             }
         } else {
-            isRealtimeMode = false
-            openGallery()
+            // If no mode is specified, set up the buttons for manual selection
+            val buttonRealTimeDetection: Button = findViewById(R.id.button_real_time_detection)
+            val buttonImportFromGallery: Button = findViewById(R.id.button_import_from_gallery)
+
+            buttonRealTimeDetection.setOnClickListener {
+                isRealtimeMode = true
+                if (allPermissionsGranted()) {
+                    startCamera()
+                } else {
+                    ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+                }
+            }
+
+            buttonImportFromGallery.setOnClickListener {
+                openGallery()
+            }
         }
     }
 
@@ -182,7 +200,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     override fun onEmptyDetect() {
         runOnUiThread {
             binding.overlay.visibility = View.GONE
-            inferenceTimeTextView.text = ""
         }
     }
 
@@ -202,7 +219,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
                     invalidate()
                 }
             }
-            inferenceTimeTextView.text = "Inference Time: ${inferenceTime}ms"
         }
     }
 
